@@ -67,6 +67,7 @@
   .field-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink3); margin-bottom: 7px; }
   .options { display: flex; flex-wrap: wrap; gap: 6px; }
   .opt-btn { background: var(--page); color: var(--ink2); border: 1.5px solid var(--page3) !important; border-radius: 8px; padding: 5px 13px; font-size: 13px; font-family: 'Nunito', sans-serif; }
+  .opt-btn:hover { border-color: var(--ink3) !important; }
   .opt-btn.active { background: var(--accent); color: #fff; border-color: var(--accent) !important; }
   .opt-btn.tag-active { background: var(--accent-light); color: var(--accent); border-color: #c3d3f9 !important; }
   textarea.notes { width: 100%; background: var(--page); border: 1.5px solid var(--page3); border-radius: 10px; padding: 10px 13px; font-family: 'Nunito', sans-serif; font-size: 13px; color: var(--ink); resize: vertical; outline: none; transition: border-color 0.2s; margin-top: 2px; }
@@ -89,7 +90,7 @@
   <div class="header">
     <div class="header-rule"></div>
     <h1>Add paper by <em>DOI</em></h1>
-    <div class="header-sub">Fetches from CrossRef · Saves directly to your Craft table</div>
+    <div class="header-sub">Fetches from CrossRef · Saves directly to your Craft table · </div>
   </div>
 
   <div class="card">
@@ -134,18 +135,19 @@
     <div id="historyList"></div>
   </div>
 
-  <div class="footer">◈ crossref.org · anthropic</div>
+  <div class="footer">◈ crossref.org · craft.do</div>
 </div>
 
 <script>
-  const WORKER_URL = "https://doi-proxy.ursulasharon.workers.dev";
+  // ── Config ──────────────────────────────────────────────────────────
+  const CRAFT_API   = "https://connect.craft.do/links/AI9Ijsf28Ql/api/v1";
   const COLLECTION_ID = "a6d35521-c29d-23e9-e19a-cc5cdf331299";
-  const CRAFT_MCP_URL = "https://mcp.craft.do/my/mcp";
   const STATUS_OPTIONS = ["To Read", "Reading", "Done", "Cited"];
-  const TAG_OPTIONS = ["ML", "NLP", "CV", "Biology", "Medicine", "Physics", "Review"];
+  const TAG_OPTIONS    = ["ML", "NLP", "CV", "Biology", "Medicine", "Physics", "Review"];
 
   let meta = null, selectedStatus = "To Read", selectedTags = [], history = [];
 
+  // ── Build status buttons ────────────────────────────────────────────
   const statusEl = document.getElementById('statusOpts');
   STATUS_OPTIONS.forEach(s => {
     const b = document.createElement('button');
@@ -159,6 +161,7 @@
     statusEl.appendChild(b);
   });
 
+  // ── Build tag buttons ───────────────────────────────────────────────
   const tagEl = document.getElementById('tagOpts');
   TAG_OPTIONS.forEach(t => {
     const b = document.createElement('button');
@@ -171,10 +174,12 @@
     tagEl.appendChild(b);
   });
 
+  // ── Helpers ─────────────────────────────────────────────────────────
   function showError(msg) { const e = document.getElementById('errorMsg'); e.textContent = '⚠ ' + msg; e.classList.add('show'); }
-  function clearError() { document.getElementById('errorMsg').classList.remove('show'); }
-  function showSuccess() { const e = document.getElementById('successMsg'); e.classList.add('show'); setTimeout(() => e.classList.remove('show'), 3000); }
+  function clearError()   { document.getElementById('errorMsg').classList.remove('show'); }
+  function showSuccess()  { const e = document.getElementById('successMsg'); e.classList.add('show'); setTimeout(() => e.classList.remove('show'), 3000); }
 
+  // ── Fetch DOI metadata from CrossRef ────────────────────────────────
   async function handleFetch() {
     const raw = document.getElementById('doiInput').value.trim();
     if (!raw) return;
@@ -183,22 +188,27 @@
     const fetchBtn = document.getElementById('fetchBtn');
     fetchBtn.disabled = true;
     fetchBtn.innerHTML = '<span class="spinner"></span>';
+
     try {
       const doi = raw.replace(/^https?:\/\/doi\.org\//i, '').trim();
       const res = await fetch(`https://api.crossref.org/works/${encodeURIComponent(doi)}`);
       if (!res.ok) throw new Error("DOI not found — please check and try again.");
       const data = await res.json();
       const w = data.message;
+
       const authors = (w.author || []).map(a => [a.family, a.given].filter(Boolean).join(', ')).join('; ') || 'Unknown';
       const journal = w['container-title']?.[0] || w['short-container-title']?.[0] || w.publisher || 'Unknown';
-      const year = w.published?.['date-parts']?.[0]?.[0] || w['published-print']?.['date-parts']?.[0]?.[0] || w['published-online']?.['date-parts']?.[0]?.[0] || null;
-      const title = w.title?.[0] || 'Untitled';
+      const year    = w.published?.['date-parts']?.[0]?.[0] || w['published-print']?.['date-parts']?.[0]?.[0] || w['published-online']?.['date-parts']?.[0]?.[0] || null;
+      const title   = w.title?.[0] || 'Untitled';
       const abstract = w.abstract ? w.abstract.replace(/<[^>]+>/g, '').trim() : '';
-      const url = w.URL || `https://doi.org/${doi}`;
+      const url     = w.URL || `https://doi.org/${doi}`;
+
       meta = { title, authors, journal, year, abstract, url, doi };
 
+      // Populate preview
       document.getElementById('prevTitle').textContent = title;
       document.getElementById('prevAuthors').textContent = authors.split(';').slice(0, 3).join(';') + (authors.split(';').length > 3 ? ' et al.' : '');
+
       const chips = document.getElementById('prevChips');
       chips.innerHTML = '';
       [journal, year ? String(year) : null, doi].filter(Boolean).forEach((c, i) => {
@@ -207,6 +217,7 @@
         span.textContent = c;
         chips.appendChild(span);
       });
+
       const absEl = document.getElementById('prevAbstract');
       if (abstract) { absEl.textContent = abstract.slice(0, 280) + (abstract.length > 280 ? '…' : ''); absEl.style.display = 'block'; }
       else { absEl.style.display = 'none'; }
@@ -214,6 +225,7 @@
       document.getElementById('preview').classList.add('show');
       document.getElementById('clearBtn').style.display = 'block';
       fetchBtn.style.display = 'none';
+
     } catch (e) {
       showError(e.message);
       fetchBtn.disabled = false;
@@ -221,6 +233,7 @@
     }
   }
 
+  // ── Clear form ───────────────────────────────────────────────────────
   function handleClear() {
     meta = null; selectedTags = []; selectedStatus = 'To Read';
     document.getElementById('doiInput').value = '';
@@ -235,46 +248,48 @@
     clearError();
   }
 
+  // ── Add to Craft via REST API ────────────────────────────────────────
   async function handleAdd() {
     if (!meta) return;
     const addBtn = document.getElementById('addBtn');
     addBtn.disabled = true;
     addBtn.innerHTML = '<span class="spinner"></span> Adding to Craft…';
     clearError();
+
     const notes = document.getElementById('notesInput').value;
+
     try {
-      const response = await fetch(WORKER_URL, {
+      const response = await fetch(`${CRAFT_API}/collections/${COLLECTION_ID}/items`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 1000,
-          mcp_servers: [{ type: "url", url: CRAFT_MCP_URL, name: "craft" }],
-          messages: [{
-            role: "user",
-            content: `Add a row to Craft collection ID "${COLLECTION_ID}" using collectionItems_add with these values:
-- title: ${JSON.stringify(meta.title)}
-- doi: ${JSON.stringify(meta.doi)}
-- authors: ${JSON.stringify(meta.authors)}
-- journal: ${JSON.stringify(meta.journal)}
-- year: ${meta.year ?? 'null'}
-- status: ${JSON.stringify(selectedStatus)}
-- tags: ${JSON.stringify(selectedTags)}
-- abstract: ${JSON.stringify(meta.abstract)}
-- url: ${JSON.stringify(meta.url)}
-- notes: ${JSON.stringify(notes)}
-Reply only: SUCCESS or FAILED: <reason>.`
+          items: [{
+            title: meta.title,
+            properties: {
+              doi:      meta.doi,
+              authors:  meta.authors,
+              journal:  meta.journal,
+              year:     meta.year,
+              status:   selectedStatus,
+              tags:     selectedTags,
+              abstract: meta.abstract,
+              url:      meta.url,
+              notes:    notes
+            }
           }]
         })
       });
-      if (!response.ok) throw new Error("Worker error: " + response.status);
-      const data = await response.json();
-      const text = (data.content || []).map(b => b.text || '').join('');
-      if (text.includes('FAILED')) throw new Error(text.replace('FAILED:', '').trim());
+
+      if (!response.ok) {
+        const err = await response.text();
+        throw new Error(`Craft API error ${response.status}: ${err}`);
+      }
+
       history.unshift({ title: meta.title, year: meta.year });
       renderHistory();
       showSuccess();
       handleClear();
+
     } catch (e) {
       showError(e.message || "Something went wrong. Please try again.");
       addBtn.disabled = false;
@@ -282,9 +297,10 @@ Reply only: SUCCESS or FAILED: <reason>.`
     }
   }
 
+  // ── History ──────────────────────────────────────────────────────────
   function renderHistory() {
     const panel = document.getElementById('historyPanel');
-    const list = document.getElementById('historyList');
+    const list  = document.getElementById('historyList');
     if (!history.length) { panel.classList.remove('show'); return; }
     panel.classList.add('show');
     list.innerHTML = '';
